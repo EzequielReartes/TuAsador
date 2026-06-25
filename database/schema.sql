@@ -45,8 +45,10 @@ CREATE TABLE [AspNetUsers] (
     [WhatsApp]             nvarchar(max)   NULL,
     [Role]                 nvarchar(max)   NOT NULL DEFAULT N'Cliente',
     [IsActive]             bit             NOT NULL DEFAULT 1,
-    [ProfilePictureUrl]    nvarchar(max)   NULL,
-    [CreatedAt]            datetime2       NOT NULL DEFAULT SYSUTCDATETIME(),
+    [ProfilePictureUrl]         nvarchar(max)   NULL,
+    [ProfilePictureData]        varbinary(max)  NULL,
+    [ProfilePictureContentType] nvarchar(max)   NULL,
+    [CreatedAt]                 datetime2       NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT [PK_AspNetUsers] PRIMARY KEY CLUSTERED ([Id] ASC)
 );
 

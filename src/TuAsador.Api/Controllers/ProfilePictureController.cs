@@ -8,22 +8,38 @@ namespace TuAsador.Api.Controllers;
 
 [ApiController]
 [Route("api/profile-picture")]
-[Authorize]
 public class ProfilePictureController : ControllerBase
 {
     private readonly UserManager<User> _userManager;
-    private readonly IWebHostEnvironment _env;
 
     private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
     private const long MaxFileSize = 5 * 1024 * 1024;
 
-    public ProfilePictureController(UserManager<User> userManager, IWebHostEnvironment env)
+    public ProfilePictureController(UserManager<User> userManager)
     {
         _userManager = userManager;
-        _env = env;
+    }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> Get([FromQuery] string? userId)
+    {
+        if (string.IsNullOrEmpty(userId))
+        {
+            userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return NotFound();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user?.ProfilePictureData == null || user.ProfilePictureContentType == null)
+            return NotFound();
+
+        return File(user.ProfilePictureData, user.ProfilePictureContentType);
     }
 
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> Upload(IFormFile file)
     {
         if (file == null || file.Length == 0)
@@ -41,34 +57,20 @@ public class ProfilePictureController : ControllerBase
         if (user == null)
             return NotFound(new { message = "Usuario no encontrado" });
 
-        var uploadsDir = Path.Combine(_env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"), "uploads", "profiles");
-        Directory.CreateDirectory(uploadsDir);
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
 
-        if (!string.IsNullOrEmpty(user.ProfilePictureUrl))
-        {
-            var oldFile = Path.Combine(
-                _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
-                user.ProfilePictureUrl.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString())
-            );
-            if (System.IO.File.Exists(oldFile))
-                System.IO.File.Delete(oldFile);
-        }
+        user.ProfilePictureData = ms.ToArray();
+        user.ProfilePictureContentType = file.ContentType;
+        user.ProfilePictureUrl = $"/api/profile-picture?userId={userId}";
 
-        var uniqueName = $"{Guid.NewGuid()}{ext}";
-        var filePath = Path.Combine(uploadsDir, uniqueName);
-
-        using (var stream = new FileStream(filePath, FileMode.Create))
-        {
-            await file.CopyToAsync(stream);
-        }
-
-        user.ProfilePictureUrl = $"/uploads/profiles/{uniqueName}";
         await _userManager.UpdateAsync(user);
 
         return Ok(new { profilePictureUrl = user.ProfilePictureUrl });
     }
 
     [HttpDelete]
+    [Authorize]
     public async Task<IActionResult> Delete()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -76,18 +78,10 @@ public class ProfilePictureController : ControllerBase
         if (user == null)
             return NotFound(new { message = "Usuario no encontrado" });
 
-        if (!string.IsNullOrEmpty(user.ProfilePictureUrl))
-        {
-            var filePath = Path.Combine(
-                _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
-                user.ProfilePictureUrl.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString())
-            );
-            if (System.IO.File.Exists(filePath))
-                System.IO.File.Delete(filePath);
-
-            user.ProfilePictureUrl = null;
-            await _userManager.UpdateAsync(user);
-        }
+        user.ProfilePictureData = null;
+        user.ProfilePictureContentType = null;
+        user.ProfilePictureUrl = null;
+        await _userManager.UpdateAsync(user);
 
         return Ok(new { message = "Foto de perfil eliminada" });
     }

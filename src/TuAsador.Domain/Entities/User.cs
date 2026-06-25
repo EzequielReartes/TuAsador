@@ -9,5 +9,7 @@ public class User : IdentityUser
     public string Role { get; set; } = "Cliente";
     public bool IsActive { get; set; } = true;
     public string? ProfilePictureUrl { get; set; }
+    public byte[]? ProfilePictureData { get; set; }
+    public string? ProfilePictureContentType { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

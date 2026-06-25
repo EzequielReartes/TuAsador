@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TuAsador.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using TuAsador.Infrastructure.Data;
 namespace TuAsador.Infrastructure.Migrations
 {
     [DbContext(typeof(TuAsadorDbContext))]
-    partial class TuAsadorDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260625160323_AddProfilePictureDataToUser")]
+    partial class AddProfilePictureDataToUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
