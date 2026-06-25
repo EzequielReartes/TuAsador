@@ -1,0 +1,23 @@
+:root {
+  --primary: #46cf5d;
+  --primary-light: #6dda80;
+  --primary-lighter: #94e5a3;
+  --primary-lightest: #d4f5dc;
+  --primary-dark: #35a54a;
+  --primary-darker: #247a35;
+
+  --bg: #0d0d0d;
+  --bg-surface: #1a1a1a;
+  --bg-elevated: #242424;
+  --border: #2a2a2a;
+  --border-light: #333;
+
+  --text: #f5f5f5;
+  --text-muted: #a3a3a3;
+  --text-dim: #6b6b6b;
+
+  --error: #ef4444;
+  --success: #46cf5d;
+
+  --gradient: linear-gradient(135deg, #46cf5d, #2a7c38);
+}
