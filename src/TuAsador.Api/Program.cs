@@ -1,9 +1,14 @@
 using System.Security.Claims;
 using System.Text;
+using FluentValidation;
+using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using TuAsador.Api.Services;
+using TuAsador.Application.Common.Behaviors;
+using TuAsador.Application.Common.Interfaces;
 using TuAsador.Domain.Entities;
 using TuAsador.Infrastructure.Data;
 
@@ -11,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<TuAsadorDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddScoped<IApplicationDbContext>(sp =>
+    sp.GetRequiredService<TuAsadorDbContext>());
 
 builder.Services.AddIdentity<User, IdentityRole>(options =>
 {
@@ -60,6 +68,17 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
+
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(IApplicationDbContext).Assembly));
+
+builder.Services.AddValidatorsFromAssembly(typeof(IApplicationDbContext).Assembly);
+
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddControllers();
 

@@ -1,4 +1,4 @@
-namespace TuAsador.Application.DTOs;
+namespace TuAsador.Application.Features.Auth;
 
 public class LoginRequest
 {

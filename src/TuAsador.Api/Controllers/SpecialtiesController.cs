@@ -1,6 +1,6 @@
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TuAsador.Infrastructure.Data;
+using TuAsador.Application.Features.Specialties.Queries.GetAll;
 
 namespace TuAsador.Api.Controllers;
 
@@ -8,20 +8,17 @@ namespace TuAsador.Api.Controllers;
 [Route("api/[controller]")]
 public class SpecialtiesController : ControllerBase
 {
-    private readonly TuAsadorDbContext _db;
+    private readonly IMediator _mediator;
 
-    public SpecialtiesController(TuAsadorDbContext db)
+    public SpecialtiesController(IMediator mediator)
     {
-        _db = db;
+        _mediator = mediator;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var specialties = await _db.Specialties
-            .Select(s => new { s.Id, s.Name })
-            .ToListAsync();
-
-        return Ok(specialties);
+        var result = await _mediator.Send(new GetAllSpecialtiesQuery());
+        return Ok(result);
     }
 }

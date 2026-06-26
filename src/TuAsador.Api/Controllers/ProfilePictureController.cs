@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using TuAsador.Domain.Entities;
+using TuAsador.Application.Features.ProfilePicture.Commands.Delete;
+using TuAsador.Application.Features.ProfilePicture.Commands.Upload;
+using TuAsador.Application.Features.ProfilePicture.Queries.Get;
 
 namespace TuAsador.Api.Controllers;
 
@@ -10,14 +12,14 @@ namespace TuAsador.Api.Controllers;
 [Route("api/profile-picture")]
 public class ProfilePictureController : ControllerBase
 {
-    private readonly UserManager<User> _userManager;
+    private readonly IMediator _mediator;
 
     private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
     private const long MaxFileSize = 5 * 1024 * 1024;
 
-    public ProfilePictureController(UserManager<User> userManager)
+    public ProfilePictureController(IMediator mediator)
     {
-        _userManager = userManager;
+        _mediator = mediator;
     }
 
     [HttpGet]
@@ -31,11 +33,11 @@ public class ProfilePictureController : ControllerBase
                 return NotFound();
         }
 
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user?.ProfilePictureData == null || user.ProfilePictureContentType == null)
+        var result = await _mediator.Send(new GetProfilePictureQuery(userId));
+        if (result == null)
             return NotFound();
 
-        return File(user.ProfilePictureData, user.ProfilePictureContentType);
+        return File(result.Data, result.ContentType);
     }
 
     [HttpPost]
@@ -53,20 +55,20 @@ public class ProfilePictureController : ControllerBase
             return BadRequest(new { message = "Solo se permiten imágenes JPG, PNG y WebP" });
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user == null)
-            return NotFound(new { message = "Usuario no encontrado" });
 
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
 
-        user.ProfilePictureData = ms.ToArray();
-        user.ProfilePictureContentType = file.ContentType;
-        user.ProfilePictureUrl = $"/api/profile-picture?userId={userId}";
-
-        await _userManager.UpdateAsync(user);
-
-        return Ok(new { profilePictureUrl = user.ProfilePictureUrl });
+        try
+        {
+            var result = await _mediator.Send(new UploadProfilePictureCommand(
+                userId, ms.ToArray(), file.ContentType, file.FileName));
+            return Ok(new { profilePictureUrl = result.ProfilePictureUrl });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpDelete]
@@ -74,15 +76,14 @@ public class ProfilePictureController : ControllerBase
     public async Task<IActionResult> Delete()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user == null)
-            return NotFound(new { message = "Usuario no encontrado" });
-
-        user.ProfilePictureData = null;
-        user.ProfilePictureContentType = null;
-        user.ProfilePictureUrl = null;
-        await _userManager.UpdateAsync(user);
-
-        return Ok(new { message = "Foto de perfil eliminada" });
+        try
+        {
+            await _mediator.Send(new DeleteProfilePictureCommand(userId));
+            return Ok(new { message = "Foto de perfil eliminada" });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 }

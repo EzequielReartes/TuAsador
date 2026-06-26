@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using TuAsador.Application.Common.Interfaces;
 using TuAsador.Domain.Entities;
 
 namespace TuAsador.Infrastructure.Data;
 
-public class TuAsadorDbContext : IdentityDbContext<User>
+public class TuAsadorDbContext : IdentityDbContext<User>, IApplicationDbContext
 {
     public TuAsadorDbContext(DbContextOptions<TuAsadorDbContext> options) : base(options) { }
 

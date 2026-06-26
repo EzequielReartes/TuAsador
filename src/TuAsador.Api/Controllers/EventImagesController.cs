@@ -1,9 +1,10 @@
 using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TuAsador.Domain.Entities;
-using TuAsador.Infrastructure.Data;
+using TuAsador.Application.Common.Models;
+using TuAsador.Application.Features.Events.Commands.DeleteImage;
+using TuAsador.Application.Features.Events.Commands.UploadImages;
 
 namespace TuAsador.Api.Controllers;
 
@@ -11,16 +12,11 @@ namespace TuAsador.Api.Controllers;
 [Route("api/events/{eventId:guid}/images")]
 public class EventImagesController : ControllerBase
 {
-    private readonly TuAsadorDbContext _db;
-    private readonly IWebHostEnvironment _env;
+    private readonly IMediator _mediator;
 
-    private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
-    private const long MaxFileSize = 5 * 1024 * 1024;
-
-    public EventImagesController(TuAsadorDbContext db, IWebHostEnvironment env)
+    public EventImagesController(IMediator mediator)
     {
-        _db = db;
-        _env = env;
+        _mediator = mediator;
     }
 
     [HttpPost]
@@ -28,68 +24,39 @@ public class EventImagesController : ControllerBase
     public async Task<IActionResult> Upload(Guid eventId, List<IFormFile> files)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var domainEvent = await _db.Events
-            .Include(e => e.Images)
-            .FirstOrDefaultAsync(e => e.Id == eventId);
 
-        if (domainEvent == null)
-            return NotFound(new { message = "Evento no encontrado" });
-
-        if (domainEvent.ClientId != userId)
-            return Forbid();
-
-        if (files == null || files.Count == 0)
-            return BadRequest(new { message = "Debe seleccionar al menos un archivo" });
-
-        var existingCount = domainEvent.Images.Count;
-        var maxNew = 3 - existingCount;
-
-        if (maxNew <= 0)
-            return BadRequest(new { message = "El evento ya tiene el máximo de 3 imágenes" });
-
-        if (files.Count > maxNew)
-            return BadRequest(new { message = $"Solo puede agregar {maxNew} imagen(es) más. Máximo 3 por evento" });
-
-        var uploadsDir = Path.Combine(
-            _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
-            "uploads", "events"
-        );
-        Directory.CreateDirectory(uploadsDir);
-
-        var images = new List<EventImage>();
-
-        foreach (var file in files)
+        var fileData = new List<FileData>();
+        if (files != null)
         {
-            if (file.Length == 0) continue;
-
-            if (file.Length > MaxFileSize)
-                return BadRequest(new { message = $"La imagen '{file.FileName}' no puede superar los 5 MB" });
-
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!AllowedExtensions.Contains(ext))
-                return BadRequest(new { message = $"Solo se permiten imágenes JPG, PNG y WebP. Archivo '{file.FileName}' no válido" });
-
-            var uniqueName = $"{Guid.NewGuid()}{ext}";
-            var filePath = Path.Combine(uploadsDir, uniqueName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            foreach (var f in files)
             {
-                await file.CopyToAsync(stream);
+                using var ms = new MemoryStream();
+                await f.CopyToAsync(ms);
+                fileData.Add(new FileData(ms.ToArray(), f.FileName, f.Length));
             }
-
-            images.Add(new EventImage
-            {
-                EventId = eventId,
-                ImageUrl = $"/uploads/events/{uniqueName}"
-            });
         }
 
-        _db.EventImages.AddRange(images);
-        await _db.SaveChangesAsync();
-
-        var result = images.Select(i => new { i.Id, i.ImageUrl, i.CreatedAt }).ToList();
-
-        return Ok(result);
+        try
+        {
+            var result = await _mediator.Send(new UploadEventImagesCommand(eventId, userId, fileData));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpDelete("{imageId:guid}")]
@@ -97,31 +64,18 @@ public class EventImagesController : ControllerBase
     public async Task<IActionResult> Delete(Guid eventId, Guid imageId)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var domainEvent = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId);
-
-        if (domainEvent == null)
-            return NotFound(new { message = "Evento no encontrado" });
-
-        if (domainEvent.ClientId != userId)
+        try
+        {
+            await _mediator.Send(new DeleteEventImageCommand(eventId, imageId, userId));
+            return Ok(new { message = "Imagen eliminada" });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
             return Forbid();
-
-        var image = await _db.EventImages
-            .FirstOrDefaultAsync(i => i.Id == imageId && i.EventId == eventId);
-
-        if (image == null)
-            return NotFound(new { message = "Imagen no encontrada" });
-
-        var filePath = Path.Combine(
-            _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
-            image.ImageUrl.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString())
-        );
-
-        if (System.IO.File.Exists(filePath))
-            System.IO.File.Delete(filePath);
-
-        _db.EventImages.Remove(image);
-        await _db.SaveChangesAsync();
-
-        return Ok(new { message = "Imagen eliminada" });
+        }
     }
 }
