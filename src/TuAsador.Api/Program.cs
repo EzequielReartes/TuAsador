@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using TuAsador.Api.Services;
 using TuAsador.Application.Common.Behaviors;
 using TuAsador.Application.Common.Interfaces;
@@ -82,12 +83,41 @@ builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddControllers();
 
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "TuAsador API",
+        Version = "v1",
+        Description = "API de conexión entre asadores y clientes"
+    });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Ingrese el token JWT con el prefijo Bearer. Ejemplo: Bearer {token}"
+    });
+
+    c.AddSecurityRequirement((document) => new OpenApiSecurityRequirement
+    {
+        { new OpenApiSecuritySchemeReference("Bearer", document), new List<string>() }
+    });
+});
+
 var app = builder.Build();
 
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();
+
+app.UseSwagger();
+app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "TuAsador API v1"));
+
 app.MapControllers();
 
 app.MapGet("/", () => Results.Content("""
