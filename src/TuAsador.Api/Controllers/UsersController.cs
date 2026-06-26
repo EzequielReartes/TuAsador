@@ -1,7 +1,6 @@
-using Microsoft.AspNetCore.Identity;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TuAsador.Domain.Entities;
+using TuAsador.Application.Features.Users.Queries.GetAll;
 
 namespace TuAsador.Api.Controllers;
 
@@ -9,31 +8,17 @@ namespace TuAsador.Api.Controllers;
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
-    private readonly UserManager<User> _userManager;
+    private readonly IMediator _mediator;
 
-    public UsersController(UserManager<User> userManager)
+    public UsersController(IMediator mediator)
     {
-        _userManager = userManager;
+        _mediator = mediator;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var users = await _userManager.Users
-            .OrderBy(u => u.Name)
-            .Select(u => new
-            {
-                u.Id,
-                u.Name,
-                u.Email,
-                u.UserName,
-                u.Role,
-                u.PhoneNumber,
-                u.WhatsApp,
-                u.CreatedAt
-            })
-            .ToListAsync();
-
-        return Ok(users);
+        var result = await _mediator.Send(new GetAllUsersQuery());
+        return Ok(result);
     }
 }

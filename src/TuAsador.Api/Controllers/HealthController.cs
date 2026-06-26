@@ -1,4 +1,6 @@
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using TuAsador.Application.Features.Health.Queries.GetHealth;
 
 namespace TuAsador.Api.Controllers;
 
@@ -6,14 +8,17 @@ namespace TuAsador.Api.Controllers;
 [Route("api/[controller]")]
 public class HealthController : ControllerBase
 {
-    [HttpGet]
-    public IActionResult Get()
+    private readonly IMediator _mediator;
+
+    public HealthController(IMediator mediator)
     {
-        return Ok(new
-        {
-            status = "operativa",
-            timestamp = DateTime.UtcNow,
-            version = "1.0.0"
-        });
+        _mediator = mediator;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        var result = await _mediator.Send(new GetHealthQuery());
+        return Ok(result);
     }
 }

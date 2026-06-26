@@ -1,11 +1,9 @@
 using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TuAsador.Application.DTOs;
-using TuAsador.Domain.Entities;
-using TuAsador.Infrastructure.Data;
+using TuAsador.Application.Features.AsadorProfile.Commands.UpdateProfile;
+using TuAsador.Application.Features.AsadorProfile.Queries.GetMyProfile;
 
 namespace TuAsador.Api.Controllers;
 
@@ -13,13 +11,11 @@ namespace TuAsador.Api.Controllers;
 [Route("api/asador/profile")]
 public class AsadorProfileController : ControllerBase
 {
-    private readonly TuAsadorDbContext _db;
-    private readonly UserManager<User> _userManager;
+    private readonly IMediator _mediator;
 
-    public AsadorProfileController(TuAsadorDbContext db, UserManager<User> userManager)
+    public AsadorProfileController(IMediator mediator)
     {
-        _db = db;
-        _userManager = userManager;
+        _mediator = mediator;
     }
 
     [HttpGet]
@@ -27,28 +23,12 @@ public class AsadorProfileController : ControllerBase
     public async Task<IActionResult> Get()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var profile = await _db.AsadorProfiles
-            .Include(p => p.User)
-            .Include(p => p.Specialties)
-            .FirstOrDefaultAsync(p => p.UserId == userId);
+        var result = await _mediator.Send(new GetMyProfileQuery(userId));
 
-        if (profile == null)
+        if (result == null)
             return NotFound(new { message = "Perfil de asador no encontrado" });
 
-        return Ok(new AsadorProfileResponse
-        {
-            Id = profile.Id,
-            Name = profile.User.Name,
-            Email = profile.User.Email!,
-            WhatsApp = profile.User.WhatsApp,
-            Description = profile.Description,
-            Instagram = profile.Instagram,
-            PhotoUrl = profile.PhotoUrl,
-            MainCity = profile.MainCity,
-            Status = profile.Status,
-            SpecialtyIds = profile.Specialties.Select(s => s.Id).ToList(),
-            SpecialtyNames = profile.Specialties.Select(s => s.Name).ToList()
-        });
+        return Ok(result);
     }
 
     [HttpPut]
@@ -56,33 +36,16 @@ public class AsadorProfileController : ControllerBase
     public async Task<IActionResult> Update([FromBody] UpdateAsadorProfileRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var profile = await _db.AsadorProfiles
-            .Include(p => p.User)
-            .Include(p => p.Specialties)
-            .FirstOrDefaultAsync(p => p.UserId == userId);
-
-        if (profile == null)
-            return NotFound(new { message = "Perfil de asador no encontrado" });
-
-        profile.Description = request.Description;
-        profile.Instagram = request.Instagram;
-        profile.PhotoUrl = request.PhotoUrl;
-        profile.MainCity = request.MainCity;
-
-        if (request.WhatsApp != null)
-            profile.User.WhatsApp = request.WhatsApp;
-
-        if (request.SpecialtyIds.Count != 0)
+        try
         {
-            var specialties = await _db.Specialties
-                .Where(s => request.SpecialtyIds.Contains(s.Id))
-                .ToListAsync();
-            profile.Specialties.Clear();
-            foreach (var s in specialties)
-                profile.Specialties.Add(s);
+            await _mediator.Send(new UpdateProfileCommand(
+                userId, request.Description, request.Instagram, request.PhotoUrl,
+                request.MainCity, request.WhatsApp, request.SpecialtyIds));
+            return Ok(new { message = "Perfil actualizado correctamente" });
         }
-
-        await _db.SaveChangesAsync();
-        return Ok(new { message = "Perfil actualizado correctamente" });
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 }
