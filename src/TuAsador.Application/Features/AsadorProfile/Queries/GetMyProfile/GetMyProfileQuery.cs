@@ -47,7 +47,11 @@ public class GetMyProfileQueryHandler : IRequestHandler<GetMyProfileQuery, Asado
             WhatsApp = profile.User.WhatsApp,
             Description = profile.Description,
             Instagram = profile.Instagram,
-            PhotoUrl = profile.PhotoUrl,
+            PhotoUrl = profile.User.ProfilePictureUrl
+                ?? (profile.User.ProfilePictureData != null
+                    ? $"/api/profile-picture?userId={profile.User.Id}"
+                    : null)
+                ?? profile.PhotoUrl,
             MainCity = profile.MainCity,
             Status = profile.Status,
             SpecialtyIds = profile.Specialties.Select(s => s.Id).ToList(),

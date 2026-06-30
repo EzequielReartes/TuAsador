@@ -4,7 +4,10 @@ import {
   getMyEvents, getEventDetail, createEvent, selectApplication, uploadEventImages,
   type EventItem, type EventDetail, type CreateEventRequest
 } from '../api/events'
+import { cancelContract, finishContract } from '../api/contracts'
 import { getSpecialties, type Specialty } from '../api/asador'
+import AsadorProfileModal from './AsadorProfileModal.vue'
+import RatingModal from './RatingModal.vue'
 
 const view = ref<'list' | 'create' | 'contracted' | 'detail'>('list')
 const events = ref<EventItem[]>([])
@@ -14,7 +17,11 @@ const loading = ref(true)
 const error = ref('')
 const success = ref('')
 const selectingId = ref<string | null>(null)
+const viewingProfileId = ref<string | null>(null)
+const viewingApplicationId = ref<string | null>(null)
 const specialties = ref<Specialty[]>([])
+const actionLoading = ref(false)
+const showRatingModal = ref(false)
 const imageFiles = ref<File[]>([])
 const imagePreviews = ref<string[]>([])
 
@@ -136,6 +143,63 @@ async function handleSelect(applicationId: string) {
   } finally {
     selectingId.value = null
   }
+}
+
+function openAsadorProfile(profileId: string, applicationId?: string) {
+  viewingProfileId.value = profileId
+  viewingApplicationId.value = applicationId || null
+}
+
+function formatWhatsApp(phone: string, name: string, eventType: string): string {
+  const clean = phone.replace(/\D/g, '')
+  const text = `Hola ${name}, he visto tu perfil y te he seleccionado para mi evento ${eventType}`
+  return `https://wa.me/${clean}?text=${encodeURIComponent(text)}`
+}
+
+function getSelectedAsador(detail: EventDetail): EventDetail['applications'][0] | null {
+  return detail.applications.find(a => a.status === 'Aceptada') || null
+}
+
+async function handleCancelContract(contractId: string) {
+  if (!confirm('¿Estás seguro de cancelar el contrato? El evento volverá a estar disponible para otros asadores.')) return
+  actionLoading.value = true
+  error.value = ''
+  success.value = ''
+  try {
+    await cancelContract(contractId)
+    success.value = 'Contrato cancelado exitosamente'
+    if (selectedEvent.value) {
+      selectedEvent.value = await getEventDetail(selectedEvent.value.id)
+    }
+    await fetchEvents()
+  } catch (e: any) {
+    error.value = e?.response?.data?.message || 'Error al cancelar contrato'
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleFinishContract(contractId: string) {
+  actionLoading.value = true
+  error.value = ''
+  try {
+    await finishContract(contractId)
+    success.value = 'Evento finalizado correctamente'
+    if (selectedEvent.value) {
+      selectedEvent.value = await getEventDetail(selectedEvent.value.id)
+    }
+    await fetchEvents()
+    showRatingModal.value = true
+  } catch (e: any) {
+    error.value = e?.response?.data?.message || 'Error al finalizar evento'
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function onRatingSubmitted() {
+  showRatingModal.value = false
+  success.value = 'Gracias por tu valoración'
 }
 
 function formatDate(dateStr: string) {
@@ -334,9 +398,12 @@ function getStatusClass(status: string) {
         </p>
 
         <div v-else class="app-grid">
-          <div v-for="app in selectedEvent.applications" :key="app.id" class="app-card">
+          <div v-for="app in selectedEvent.applications" :key="app.id" class="app-card" @click="openAsadorProfile(app.asadorProfileId, app.id)">
             <div class="app-header">
-              <div class="app-avatar">{{ app.asadorName.charAt(0) }}</div>
+              <div class="app-avatar">
+                <img v-if="app.asadorPhotoUrl" :src="app.asadorPhotoUrl" alt="Foto" />
+                <span v-else>{{ app.asadorName.charAt(0) }}</span>
+              </div>
               <div>
                 <div class="app-name">{{ app.asadorName }}</div>
                 <div class="app-city">{{ app.mainCity }}</div>
@@ -357,15 +424,6 @@ function getStatusClass(status: string) {
               <span class="app-status">{{ app.status }}</span>
               <span class="app-date">Postulado {{ formatDateTime(app.createdAt) }}</span>
             </div>
-
-            <button
-              v-if="app.status === 'Pendiente'"
-              class="select-btn"
-              :disabled="selectingId === app.id"
-              @click="handleSelect(app.id)"
-            >
-              {{ selectingId === app.id ? 'Seleccionando...' : 'Seleccionar Asador' }}
-            </button>
           </div>
         </div>
       </div>
@@ -374,9 +432,12 @@ function getStatusClass(status: string) {
         <p class="success">Este evento ya tiene un asador asignado.</p>
         <div v-for="app in selectedEvent.applications.filter(a => a.status === 'Aceptada')" :key="app.id" class="app-card selected">
           <div class="app-header">
-            <div class="app-avatar">{{ app.asadorName.charAt(0) }}</div>
+            <div class="app-avatar">
+              <img v-if="app.asadorPhotoUrl" :src="app.asadorPhotoUrl" alt="Foto" />
+              <span v-else>{{ app.asadorName.charAt(0) }}</span>
+            </div>
             <div>
-              <div class="app-name">{{ app.asadorName }}</div>
+              <div class="app-name" @click.stop="openAsadorProfile(app.asadorProfileId)">{{ app.asadorName }}</div>
               <div class="app-city">{{ app.mainCity }}</div>
             </div>
           </div>
@@ -386,9 +447,60 @@ function getStatusClass(status: string) {
           <div class="app-meta">
             <span class="app-status accepted">Aceptada</span>
           </div>
+
+          <div class="contract-actions" v-if="selectedEvent.contractId">
+            <template v-if="selectedEvent.contractStatus === 'Pendiente'">
+              <a
+                v-if="app.whatsApp"
+                :href="formatWhatsApp(app.whatsApp, app.asadorName, selectedEvent.eventType)"
+                target="_blank"
+                class="whatsapp-btn"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                Contactar por WhatsApp
+              </a>
+              <div class="contract-action-row">
+                <button
+                  class="cancel-btn"
+                  :disabled="actionLoading"
+                  @click="handleCancelContract(selectedEvent.contractId!)"
+                >Cancelar Contrato</button>
+                <button
+                  class="finish-btn"
+                  :disabled="actionLoading"
+                  @click="handleFinishContract(selectedEvent.contractId!)"
+                >Finalizar Evento</button>
+              </div>
+            </template>
+            <template v-else-if="selectedEvent.contractStatus === 'Finalizado'">
+              <p class="finalized-badge">Evento finalizado</p>
+            </template>
+            <template v-else-if="selectedEvent.contractStatus === 'Cancelado'">
+              <p class="cancelled-badge">Contrato cancelado</p>
+            </template>
+          </div>
         </div>
       </div>
     </template>
+
+    <AsadorProfileModal
+      v-if="viewingProfileId"
+      :profileId="viewingProfileId"
+      :applicationId="viewingApplicationId"
+      :selecting="selectingId === viewingApplicationId"
+      @close="viewingProfileId = null; viewingApplicationId = null"
+      @select="(appId) => handleSelect(appId)"
+    />
+
+    <RatingModal
+      v-if="showRatingModal && selectedEvent"
+      :contractId="selectedEvent.contractId!"
+      :asadorName="getSelectedAsador(selectedEvent)?.asadorName || ''"
+      @close="showRatingModal = false"
+      @submitted="onRatingSubmitted"
+    />
   </div>
 </template>
 
@@ -614,6 +726,11 @@ select {
   border: 1px solid var(--border);
   border-radius: .75rem;
   padding: 1rem;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.app-card:hover {
+  border-color: var(--primary);
 }
 .app-card.selected {
   border-color: var(--primary);
@@ -636,10 +753,21 @@ select {
   font-size: 1rem;
   color: #fff;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.app-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .app-name {
   font-weight: 600;
   font-size: .95rem;
+  cursor: pointer;
+  transition: color .15s;
+}
+.app-name:hover {
+  color: var(--primary);
 }
 .app-city {
   font-size: .8rem;
@@ -706,6 +834,90 @@ select {
 }
 .assigned-info {
   margin-top: 1rem;
+}
+.contract-actions {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  padding: .7rem;
+  border: none;
+  border-radius: .5rem;
+  background: #25D366;
+  color: #fff;
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  justify-content: center;
+  transition: opacity .15s;
+  margin-bottom: .75rem;
+}
+.whatsapp-btn:hover {
+  opacity: .9;
+}
+.contract-action-row {
+  display: flex;
+  gap: .75rem;
+}
+.cancel-btn {
+  flex: 1;
+  padding: .6rem;
+  border: 1px solid var(--border-light);
+  border-radius: .5rem;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .85rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.cancel-btn:hover {
+  border-color: var(--error);
+  color: var(--error);
+  background: #3a1a1a;
+}
+.cancel-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+.finish-btn {
+  flex: 1;
+  padding: .6rem;
+  border: none;
+  border-radius: .5rem;
+  background: var(--gradient);
+  color: #fff;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.finish-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+.finalized-badge {
+  text-align: center;
+  padding: .5rem;
+  background: #1a3a1a;
+  color: var(--primary);
+  border-radius: .5rem;
+  font-size: .85rem;
+  font-weight: 600;
+}
+.cancelled-badge {
+  text-align: center;
+  padding: .5rem;
+  background: #3a1a1a;
+  color: var(--error);
+  border-radius: .5rem;
+  font-size: .85rem;
+  font-weight: 600;
 }
 
 /* Image upload */

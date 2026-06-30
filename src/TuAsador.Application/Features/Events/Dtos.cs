@@ -50,6 +50,8 @@ public class EventDetailDto
     public List<EventApplicationDto> Applications { get; init; } = new();
     public bool HasApplied { get; init; }
     public List<string> ImageUrls { get; init; } = new();
+    public Guid? ContractId { get; init; }
+    public string? ContractStatus { get; init; }
 }
 
 public class EventApplicationDto

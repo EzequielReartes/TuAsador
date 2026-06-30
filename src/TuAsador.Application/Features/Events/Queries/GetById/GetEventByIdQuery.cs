@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using TuAsador.Application.Common.Interfaces;
+using TuAsador.Domain.Entities;
 
 namespace TuAsador.Application.Features.Events.Queries.GetById;
 
@@ -34,7 +35,33 @@ public class GetEventByIdQueryHandler : IRequestHandler<GetEventByIdQuery, Event
 
         if (domainEvent == null) return null;
 
+        Contract? contract = null;
+        if (request.UserId == domainEvent.ClientId && domainEvent.Status == "Asignado")
+        {
+            contract = await _db.Contracts
+                .Where(c => c.EventId == domainEvent.Id && c.ClientId == request.UserId)
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         var isOwner = request.UserId == domainEvent.ClientId;
+
+        Dictionary<string, double> ratingCache = new();
+        if (isOwner && domainEvent.Applications.Count > 0)
+        {
+            var userIds = domainEvent.Applications.Select(a => a.AsadorProfile.UserId).Distinct().ToList();
+            var ratingsByUser = await _db.Ratings
+                .Where(r => userIds.Contains(r.RevieweeId))
+                .GroupBy(r => r.RevieweeId)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    Avg = (g.Average(r => r.PunctualityScore) + g.Average(r => r.PresenceScore) + g.Average(r => r.PerformanceScore)) / 3.0
+                })
+                .ToListAsync(cancellationToken);
+
+            ratingCache = ratingsByUser.ToDictionary(x => x.UserId, x => Math.Round(x.Avg, 1));
+        }
 
         return new EventDetailDto
         {
@@ -53,16 +80,22 @@ public class GetEventByIdQueryHandler : IRequestHandler<GetEventByIdQuery, Event
             CreatedAt = domainEvent.CreatedAt,
             HasApplied = profile != null && domainEvent.Applications.Any(a => a.AsadorProfileId == profile.Id),
             ImageUrls = domainEvent.Images.Select(i => i.ImageUrl).ToList(),
+            ContractId = contract?.Id,
+            ContractStatus = contract?.Status,
             Applications = isOwner
                 ? domainEvent.Applications.Select(a => new EventApplicationDto
                 {
                     Id = a.Id,
                     AsadorProfileId = a.AsadorProfileId,
                     AsadorName = a.AsadorProfile.User.Name,
-                    AsadorPhotoUrl = a.AsadorProfile.PhotoUrl,
+                    AsadorPhotoUrl = a.AsadorProfile.User.ProfilePictureUrl
+                        ?? (a.AsadorProfile.User.ProfilePictureData != null
+                            ? $"/api/profile-picture?userId={a.AsadorProfile.User.Id}"
+                            : null)
+                        ?? a.AsadorProfile.PhotoUrl,
                     WhatsApp = a.AsadorProfile.User.WhatsApp,
                     MainCity = a.AsadorProfile.MainCity,
-                    AverageRating = a.AsadorProfile.AverageRating,
+                    AverageRating = ratingCache.GetValueOrDefault(a.AsadorProfile.UserId, 0),
                     Status = a.Status,
                     CreatedAt = a.CreatedAt,
                     Description = a.AsadorProfile.Description,

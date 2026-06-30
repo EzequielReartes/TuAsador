@@ -61,9 +61,10 @@ public class ProfilePictureController : ControllerBase
 
         try
         {
-            var result = await _mediator.Send(new UploadProfilePictureCommand(
+            await _mediator.Send(new UploadProfilePictureCommand(
                 userId, ms.ToArray(), file.ContentType, file.FileName));
-            return Ok(new { profilePictureUrl = result.ProfilePictureUrl });
+            var url = $"/api/profile-picture?userId={userId}";
+            return Ok(new { profilePictureUrl = url });
         }
         catch (KeyNotFoundException ex)
         {

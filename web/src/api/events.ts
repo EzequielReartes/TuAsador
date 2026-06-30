@@ -36,6 +36,8 @@ export interface EventDetail {
   applications: EventApplication[]
   hasApplied: boolean
   imageUrls: string[]
+  contractId: string | null
+  contractStatus: string | null
 }
 
 export interface EventApplication {

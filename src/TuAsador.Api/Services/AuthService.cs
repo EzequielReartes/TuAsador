@@ -37,7 +37,9 @@ public class AuthService : IAuthService
             Name = user.Name,
             Email = user.Email!,
             Role = user.Role,
-            ProfilePictureUrl = user.ProfilePictureUrl
+            ProfilePictureUrl = user.ProfilePictureData != null
+                ? $"/api/profile-picture?userId={user.Id}"
+                : user.ProfilePictureUrl
         };
     }
 
@@ -73,7 +75,9 @@ public class AuthService : IAuthService
             Name = user.Name,
             Email = user.Email!,
             Role = user.Role,
-            ProfilePictureUrl = user.ProfilePictureUrl
+            ProfilePictureUrl = user.ProfilePictureData != null
+                ? $"/api/profile-picture?userId={user.Id}"
+                : user.ProfilePictureUrl
         };
     }
 

@@ -35,6 +35,30 @@ export interface PortfolioImage {
   createdAt: string
 }
 
+export interface AsadorPublicProfile {
+  id: string
+  name: string
+  photoUrl: string | null
+  whatsApp: string | null
+  instagram: string | null
+  mainCity: string
+  status: string
+  description: string | null
+  averageRating: number
+  punctualityRating: number
+  presenceRating: number
+  performanceRating: number
+  cancellationRate: number
+  specialtyNames: string[]
+  portfolioImages: { id: string; imageUrl: string }[]
+  createdAt: string
+}
+
+export async function getAsadorPublicProfile(id: string): Promise<AsadorPublicProfile> {
+  const { data } = await api.get<AsadorPublicProfile>(`/asador/profile/${id}/public`)
+  return data
+}
+
 export async function getMyProfile(): Promise<AsadorProfile> {
   const { data } = await api.get<AsadorProfile>('/asador/profile')
   return data

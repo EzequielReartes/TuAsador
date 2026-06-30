@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TuAsador.Application.Features.AsadorProfile.Commands.UpdateProfile;
 using TuAsador.Application.Features.AsadorProfile.Queries.GetMyProfile;
+using TuAsador.Application.Features.AsadorProfile.Queries.GetPublicProfile;
 
 namespace TuAsador.Api.Controllers;
 
@@ -24,6 +25,18 @@ public class AsadorProfileController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var result = await _mediator.Send(new GetMyProfileQuery(userId));
+
+        if (result == null)
+            return NotFound(new { message = "Perfil de asador no encontrado" });
+
+        return Ok(result);
+    }
+
+    [HttpGet("{profileId:guid}/public")]
+    [Authorize]
+    public async Task<IActionResult> GetPublic(Guid profileId)
+    {
+        var result = await _mediator.Send(new GetPublicProfileQuery(profileId));
 
         if (result == null)
             return NotFound(new { message = "Perfil de asador no encontrado" });
