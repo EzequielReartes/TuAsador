@@ -27,10 +27,10 @@ public class UploadProfilePictureCommandHandler : IRequestHandler<UploadProfileP
 
         user.ProfilePictureData = request.FileData;
         user.ProfilePictureContentType = request.ContentType;
-        user.ProfilePictureUrl = $"/api/profile-picture?userId={request.UserId}";
+        user.ProfilePictureUrl = null;
 
         await _userService.UpdateAsync(user);
 
-        return new UploadProfilePictureResult { ProfilePictureUrl = user.ProfilePictureUrl };
+        return new UploadProfilePictureResult();
     }
 }
